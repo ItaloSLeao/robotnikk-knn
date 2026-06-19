@@ -88,4 +88,194 @@ public class Robotnikk extends AdvancedRobot {
         } while (true);
     }
 
+    /**
+     * Evento disparado ao escanear um inimigo. Atualiza os estados, capta as propriedades e
+     * engatilha a fuga da onda e tiro.
+     */
+    public void onScannedRobot(ScannedRobotEvent e) {
+        minhaPosicao = new Point2D.Double(getX(), getY());
+        double velocidadeLateral = getVelocity() * Math.sin(e.getBearingRadians());
+        double anguloAbsoluto = e.getBearingRadians() + getHeadingRadians();
+
+        direcoesSurf.add(0, (velocidadeLateral >= 0) ? 1 : -1);
+        angulosAbsolutosSurf.add(0, anguloAbsoluto + Math.PI);
+
+        if (Math.abs(getVelocity()) - Math.abs(getVelocity() - velocidadeLateral) != 0) {
+            tempoUltimaMudancaMinhaVelocidade++;
+        } else {
+            tempoUltimaMudancaMinhaVelocidade = 0;
+        }
+
+        double poderBalaInimiga = energiaInimigo - e.getEnergy();
+        if (poderBalaInimiga < 3.01 && poderBalaInimiga > 0.09 && direcoesSurf.size() > 2) {
+            tirosInimigosDestaPartida++; // Rastreia o tiro do inimigo para estatisticas
+
+            Robotnikka.OndaInimiga onda = new Robotnikka.OndaInimiga();
+            onda.tempoDisparo = getTime() - 1;
+            onda.velocidadeBala = Rules.getBulletSpeed(poderBalaInimiga);
+            onda.distanciaPercorrida = Rules.getBulletSpeed(poderBalaInimiga);
+            onda.direcao = direcoesSurf.get(2);
+            onda.anguloDireto = angulosAbsolutosSurf.get(2);
+            onda.posicaoDisparo = (Point2D.Double) posicaoInimigo.clone();
+
+            minhaDistanciaParede = calcularDistanciaParede(anguloAbsoluto + Math.PI, e.getDistance(),
+                    calcularAnguloMaximoFuga(onda.velocidadeBala, minhaPosicao.distance(onda.posicaoDisparo)));
+            double bft = Math.max(1, e.getDistance() / onda.velocidadeBala);
+            double velAproximacao = getVelocity() * Math.cos(e.getBearingRadians());
+
+            onda.caracteristicas = new double[] {
+                    limitarValor(0, 1, e.getDistance() / 800.0) * 3.0,
+                    limitarValor(0, 1, Math.abs(velocidadeLateral) / 8.0) * 4.0,
+                    limitarValor(0, 1, Math.abs(getVelocity()) / 8.0),
+                    limitarValor(0, 1, (tempoUltimaMudancaMinhaVelocidade / bft) / 1.5) * 2.0,
+                    limitarValor(0, 1, minhaDistanciaParede / 1.5) * 2.0,
+                    limitarValor(0, 1, (velAproximacao + 8.0) / 16.0)
+            };
+
+            ondasInimigas.add(onda);
+        }
+
+        energiaInimigo = e.getEnergy();
+        posicaoInimigo = projetarCoordenadas(minhaPosicao, anguloAbsoluto, e.getDistance());
+
+        atualizarOndas();
+        executarSurfing();
+
+        //poder decai suavemente com a distancia. max: 3.0, min: 0.1
+        double poder = Math.min(3.0, 400.0 / e.getDistance());
+        poderFinalBala = Math.max(0.1, Math.min(poder, Math.min(e.getEnergy() / 4, getEnergy() / 5)));
+
+        //estrategia de esgotamento de energia - se mais de 10 tiros, energia maior e baixa precisao inimiga
+        if (tirosInimigosDestaPartida > 10 && getEnergy() > energiaInimigo) {
+            double taxaDeAcertoInimiga = (double) acertosInimigosDestaPartida / tirosInimigosDestaPartida;
+            if (taxaDeAcertoInimiga < 0.15) {
+                //desliga os tiros fortes, ativando o poder minimo (0.1) apenas para counterar os tiros
+                //fazendo com que o inimigo gaste sua energia ate ficar desabled
+                poderFinalBala = 0.1;
+            }
+        }
+
+        double velocidadeBala = Rules.getBulletSpeed(poderFinalBala);
+
+        ultimaVelocidadeInimigo = velocidadeInimigo;
+        velocidadeInimigo = e.getVelocity();
+
+        velocidadeLateralInimigo = velocidadeInimigo * Math.sin(e.getHeadingRadians() - anguloAbsoluto);
+        if (velocidadeLateralInimigo != 0)
+            direcaoMovimento = (velocidadeLateralInimigo > 0 ? 1 : -1);
+        anguloMaximoFuga = direcaoMovimento * calcularAnguloMaximoFuga(velocidadeBala, e.getDistance());
+
+        distanciaParede = calcularDistanciaParede(anguloAbsoluto, e.getDistance(), anguloMaximoFuga);
+        distanciaParedeOposta = calcularDistanciaParede(anguloAbsoluto, e.getDistance(), -anguloMaximoFuga);
+
+        double tempoMovimento = velocidadeBala * tempoUltimaMudancaVelocidade++ / e.getDistance();
+        if (Math.abs(velocidadeInimigo) - Math.abs(ultimaVelocidadeInimigo) != 0) {
+            tempoUltimaMudancaVelocidade = 0;
+        }
+
+        Robotnikka.OndaTiro ondaTiro = new Robotnikka.OndaTiro();
+        ondaTiro.origemBala = minhaPosicao;
+        ondaTiro.origemInimigo = projetarCoordenadas(posicaoInimigo, e.getHeadingRadians(), -velocidadeInimigo);
+        ondaTiro.ultimaPosicaoInimigo = ondaTiro.origemInimigo;
+        ondaTiro.anguloBala = calcularAnguloAbsoluto(ondaTiro.origemBala, ondaTiro.origemInimigo);
+        ondaTiro.velocidadeBala = velocidadeBala;
+        ondaTiro.tempoDisparo = getTime() - 1;
+        ondaTiro.ultimoTempo = ondaTiro.tempoDisparo;
+        ondaTiro.anguloMaximoFuga = anguloMaximoFuga;
+
+        double velAproximacaoInimigo = velocidadeInimigo * Math.cos(e.getHeadingRadians() - anguloAbsoluto);
+
+        ondaTiro.caracteristicas = new double[] {
+                limitarValor(0, 1, e.getDistance() / 800.0) * 3.0,
+                limitarValor(0, 1, Math.abs(velocidadeLateralInimigo) / 8.0) * 4.0,
+                limitarValor(0, 1, Math.abs(velocidadeInimigo) / 8.0) * 1.0,
+                limitarValor(0, 1, tempoMovimento / 1.5) * 1.0,
+                limitarValor(0, 1, distanciaParede / 1.5) * 2.0,
+                limitarValor(0, 1, (velAproximacaoInimigo + 8.0) / 16.0) * 1.0
+        };
+        ondasTiro.add(ondaTiro);
+
+        for (int i = 0; i < ondasTiro.size(); i++) {
+            Robotnikka.OndaTiro onda = ondasTiro.get(i);
+            if (onda.atualizar(getTime(), posicaoInimigo)) {
+                ondasTiro.remove(onda);
+                i--;
+            }
+        }
+
+        int melhorIndice = FATOR_TIRO_CENTRAL;
+        double pesoMaximo = 0;
+        double[] binsSuavizados = new double[TOTAL_FATORES_TIRO];
+
+        // Se o KNN ja tem dados maduros, roda a busca
+        if (arvoreTiro.tamanho() > 50) {
+            List<Robotnikka.ArvoreKd.Entrada<Double>> vizinhos = arvoreTiro.vizinhoMaisProximo(ondaTiro.caracteristicas,
+                    (int) Math.min(Math.max(5, arvoreTiro.tamanho() / 10.0), 100), false);
+            double larguraBanda = (arvoreTiro.tamanho() < 100 ? 0.2 : 0.05) + (0.1 * (e.getDistance() / 800.0));
+
+            for (int i = 0; i < TOTAL_FATORES_TIRO; i++) {
+                double gfAlvo = (double) (i - FATOR_TIRO_CENTRAL) / FATOR_TIRO_CENTRAL;
+                for (Robotnikka.ArvoreKd.Entrada<Double> vizinho : vizinhos) {
+                    double pesoDistancia = 1.0 / (1.0 + vizinho.distancia);
+                    double diffGf = gfAlvo - vizinho.valor;
+                    double pesoKernel = Math.exp(-0.5 * Math.pow(diffGf / larguraBanda, 2));
+                    binsSuavizados[i] += pesoDistancia * pesoKernel;
+                }
+            }
+        }
+
+        // Fator de Mesclagem Hibrida: Comeca 1.0 no array Frio e decai ate 0.0 no no 150
+        double pesoKNN = limitarValor(0.0, 1.0, (arvoreTiro.tamanho() - 50.0) / 100.0);
+        double pesoFrio = 1.0 - pesoKNN;
+
+        for (int i = 0; i < TOTAL_FATORES_TIRO; i++) {
+            // Mistura o bin do KNN com o bin Estatico do Cold Start
+            double valorHibrido = (binsSuavizados[i] * pesoKNN) + (hibridoTiroFrio[i] * pesoFrio);
+
+            if (valorHibrido > pesoMaximo) {
+                pesoMaximo = valorHibrido;
+                melhorIndice = i;
+            }
+        }
+
+        Point2D.Double proximaMinhaPosicao = projetarCoordenadas(minhaPosicao, getHeadingRadians(), getVelocity());
+        Point2D.Double proximaPosicaoInimigo = projetarCoordenadas(posicaoInimigo, e.getHeadingRadians(),
+                velocidadeInimigo);
+        double proximoAnguloAbsoluto = calcularAnguloAbsoluto(proximaMinhaPosicao, proximaPosicaoInimigo);
+
+        if (getGunHeat() < getGunCoolingRate() * 3) {
+            giroFinalArma = Utils.normalRelativeAngle(proximoAnguloAbsoluto - getGunHeadingRadians()
+                    + anguloMaximoFuga * (melhorIndice / (double) FATOR_TIRO_CENTRAL - 1));
+        } else {
+            giroFinalArma = Utils.normalRelativeAngle(proximoAnguloAbsoluto - getGunHeadingRadians());
+        }
+
+        // --- LÓGICA DE BULLET SHIELDING ---
+        boolean escudoAtivado = false;
+        if (!ondasInimigas.isEmpty() && getGunHeat() == 0) {
+            Robotnikka.OndaInimiga ondaCritica = obterOndaMaisProxima();
+            if (ondaCritica != null) {
+                double tempoImpacto = (minhaPosicao.distance(ondaCritica.posicaoDisparo) - ondaCritica.distanciaPercorrida) / ondaCritica.velocidadeBala;
+                double perigoAtual = calcularPerigo(ondaCritica, direcoesSurf.isEmpty() ? 1 : direcoesSurf.get(0));
+
+                // Condição de Escudo: Bala está perto (< 15 ticks), é forte (bala lenta/pesada) e o perigo é muito alto
+                if (tempoImpacto > 0 && tempoImpacto < 15 && ondaCritica.velocidadeBala < 14.0 && perigoAtual > 5.0) {
+                    double anguloParaBala = calcularAnguloAbsoluto(minhaPosicao, ondaCritica.posicaoDisparo);
+                    giroFinalArma = Utils.normalRelativeAngle(anguloParaBala - getGunHeadingRadians());
+                    poderFinalBala = 0.1; // Poder mínimo para interceptação rápida
+                    escudoAtivado = true;
+                }
+            }
+        }
+
+        setTurnGunRightRadians(giroFinalArma);
+        if (poderFinalBala > 0 && getGunHeat() == 0) {
+            setFire(poderFinalBala);
+        }
+
+        setTurnRadarRightRadians(Utils.normalRelativeAngle(anguloAbsoluto - getRadarHeadingRadians()) * 2);
+    }
+
+    
+
 }
