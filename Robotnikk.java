@@ -329,4 +329,18 @@ public class Robotnikk extends AdvancedRobot {
         }
     }
 
+    /**
+     * Calcula a distancia ate atingir uma parede.
+     */
+    private double calcularDistanciaParede(double anguloAbsoluto, double distanciaInimigo, double envelope) {
+        double dist = 1.5;
+        while (dist >= 0.1) {
+            dist -= 0.1;
+            Point2D.Double pos = projetarCoordenadas(minhaPosicao, anguloAbsoluto + dist * envelope, distanciaInimigo);
+            if (campoBatalha.contains(pos))
+                break;
+        }
+        return dist;
+    }
+
 }
