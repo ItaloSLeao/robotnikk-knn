@@ -672,4 +672,63 @@ public class Robotnikk extends AdvancedRobot {
         return Math.max(min, Math.min(max, valor));
     }
 
+    /**
+     * Classe que rastreia fisicamente o comportamento de uma onda disparada pelo inimigo.
+     */
+    class OndaInimiga {
+        Point2D.Double posicaoDisparo;
+        long tempoDisparo;
+        double velocidadeBala;
+        double anguloDireto;
+        double distanciaPercorrida;
+        int direcao;
+        double[] caracteristicas;
+        double[] perfilPerigo = new double[TOTAL_FATORES_MOVIMENTO];
+        boolean perfilCalculado = false;
+    }
+
+    /**
+     * Classe que rastreia fisicamente a onda da arma do robo e seu impacto para treinar a precisao (KNN).
+     */
+    class OndaTiro {
+        Point2D.Double origemBala;
+        Point2D.Double origemInimigo;
+        Point2D.Double ultimaPosicaoInimigo;
+        double anguloBala;
+        double velocidadeBala;
+        double anguloMaximoFuga;
+        long tempoDisparo;
+        long ultimoTempo;
+        double[] caracteristicas;
+
+        /**
+         * Verifica se a colisao da bala ao inimigo ocorreu.
+         */
+        boolean atualizar(long tempo, Point2D posicaoAtualInimigo) {
+            long deltaTime = tempo - ultimoTempo;
+            double deltaX = (posicaoAtualInimigo.getX() - ultimaPosicaoInimigo.getX()) / deltaTime;
+            double deltaY = (posicaoAtualInimigo.getY() - ultimaPosicaoInimigo.getY()) / deltaTime;
+            do {
+                if (origemBala.distance(ultimaPosicaoInimigo) <= velocidadeBala * (ultimoTempo - tempoDisparo)) {
+                    double diffAngulo = calcularAnguloAbsoluto(origemBala, ultimaPosicaoInimigo) - anguloBala;
+                    double gf = Utils.normalRelativeAngle(diffAngulo) / anguloMaximoFuga;
+                    arvoreTiro.adicionarPonto(caracteristicas, limitarValor(-1.0, 1.0, gf));
+
+                    //alimenta a heuristica rapida para o cold start
+                    int indexGf = (int) Math.round((limitarValor(-1.0, 1.0, gf) * FATOR_TIRO_CENTRAL) + FATOR_TIRO_CENTRAL);
+                    indexGf = (int) Math.max(0, Math.min(TOTAL_FATORES_TIRO - 1, indexGf));
+                    for (int x = 0; x < TOTAL_FATORES_TIRO; x++) {
+                        hibridoTiroFrio[x] += 1.0 / (Math.pow(indexGf - x, 2) + 1);
+                    }
+
+                    return true;
+                }
+                ultimoTempo++;
+                ultimaPosicaoInimigo.setLocation(ultimaPosicaoInimigo.getX() + deltaX,
+                        ultimaPosicaoInimigo.getY() + deltaY);
+            } while (ultimoTempo < tempo);
+            return false;
+        }
+    }
+
 }
