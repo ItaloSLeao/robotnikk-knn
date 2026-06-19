@@ -642,4 +642,34 @@ public class Robotnikk extends AdvancedRobot {
             robo.setAhead(100);
         }
     }
+
+    /**
+     * Projeta uma nova coordenada baseada no ponto de origem, angulo e hipotenusa.
+     */
+    public static Point2D.Double projetarCoordenadas(Point2D.Double origem, double angulo, double distancia) {
+        return new Point2D.Double(origem.x + Math.sin(angulo) * distancia, origem.y + Math.cos(angulo) * distancia);
+    }
+
+    /**
+     * Mede o angulo absoluto do alvo relativo a um ponto zero.
+     */
+    public static double calcularAnguloAbsoluto(Point2D.Double origem, Point2D.Double alvo) {
+        return Math.atan2(alvo.x - origem.x, alvo.y - origem.y);
+    }
+
+    /**
+     * Identifica o limite maximo onde a bala poderia alcancar o inimigo com base na sua velocidade
+     * estimada de 8 px/tick, incluindo a largura fisica do hitbox.
+     */
+    public static double calcularAnguloMaximoFuga(double velocidadeBala, double distancia) {
+        return Math.asin(8.0 / velocidadeBala) + Math.atan(18.0 / Math.max(0.1, distancia));
+    }
+
+    /**
+     * Limita o valor numerico entre o piso (min) e teto (max).
+     */
+    public double limitarValor(double min, double max, double valor) {
+        return Math.max(min, Math.min(max, valor));
+    }
+
 }
