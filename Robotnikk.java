@@ -574,4 +574,28 @@ public class Robotnikk extends AdvancedRobot {
         distParede -= (1 + Math.sin(dir + (dirOrbita * Math.PI / 2))) * RAIO_CURVA;
         return distParede < 0;
     }
+
+    /**
+     * Modela o estado do robo em um instante Futuro para fazer a previsao de comportamentos.
+     */
+    static class FuturoPrevisto {
+        Point2D.Double posicao;
+        double direcaoAtual;
+        double velocidade;
+        long tempoJogo;
+
+        FuturoPrevisto(Point2D.Double loc, double d, double v, long t) {
+            this.posicao = loc;
+            this.direcaoAtual = d;
+            this.velocidade = v;
+            this.tempoJogo = t;
+        }
+
+        public Robotnikka.FuturoPrevisto obterProximoEstado(int direcao, double curva) {
+            double proximaVel = Robotnikka.Fisica.proximaVelocidade(velocidade, direcao);
+            double proximaDir = direcaoAtual + Robotnikka.Fisica.incrementoCurva(curva, velocidade);
+            return new Robotnikka.FuturoPrevisto(projetarCoordenadas(posicao, proximaDir, proximaVel),
+                    proximaDir, proximaVel, tempoJogo + 1);
+        }
+    }
 }
