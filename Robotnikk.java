@@ -622,4 +622,24 @@ public class Robotnikk extends AdvancedRobot {
             return Math.max(-max, Math.min(max, t));
         }
     }
+
+    /**
+     * Aplica o movimento de "re" quando o giro necessario for superior a 90 graus.
+     */
+    public static void configurarFrenteTras(AdvancedRobot robo, double anguloAlvo) {
+        double angulo = Utils.normalRelativeAngle(anguloAlvo - robo.getHeadingRadians());
+        if (Math.abs(angulo) > (Math.PI / 2)) {
+            if (angulo < 0)
+                robo.setTurnRightRadians(Math.PI + angulo);
+            else
+                robo.setTurnLeftRadians(Math.PI - angulo);
+            robo.setBack(100);
+        } else {
+            if (angulo < 0)
+                robo.setTurnLeftRadians(-1 * angulo);
+            else
+                robo.setTurnRightRadians(angulo);
+            robo.setAhead(100);
+        }
+    }
 }
