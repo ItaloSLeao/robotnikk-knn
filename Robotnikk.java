@@ -62,4 +62,30 @@ public class Robotnikk extends AdvancedRobot {
     //arrays heuristicos para o cold start, ate a arvore knn tiver condicoes de aprendizado
     public static double[] hibridoTiroFrio = new double[TOTAL_FATORES_TIRO];
     public static double[] hibridoMovimentoFrio = new double[TOTAL_FATORES_MOVIMENTO];
+
+
+    /**
+     * Inicializa as variaveis, configura as cores do robo e inicia o giro continuo do radar.
+     */
+    public void run() {
+        setAdjustGunForRobotTurn(true);
+        setAdjustRadarForGunTurn(true);
+        setColors(Color.BLACK, Color.BLUE, Color.BLACK);
+        setScanColor(Color.GREEN);
+
+        larguraCampo = getBattleFieldWidth();
+        alturaCampo = getBattleFieldHeight();
+        campoBatalha = new Rectangle2D.Double(MARGEM_PAREDE, MARGEM_PAREDE, larguraCampo - MARGEM_PAREDE * 2,
+                alturaCampo - MARGEM_PAREDE * 2);
+
+        ondasTiro = new ArrayList<>();
+        ondasInimigas = new ArrayList<>();
+        direcoesSurf = new ArrayList<>();
+        angulosAbsolutosSurf = new ArrayList<>();
+
+        do {
+            turnRadarRightRadians(Double.POSITIVE_INFINITY);
+        } while (true);
+    }
+
 }
