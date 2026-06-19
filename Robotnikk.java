@@ -372,4 +372,49 @@ public class Robotnikk extends AdvancedRobot {
         }
         configurarFrenteTras(this, anguloAlvo);
     }
+
+    /**
+     * Remove ondas que ja passaram do robo para otimizar o processamento dos dados
+     */
+    public void atualizarOndas() {
+        for (int i = 0; i < ondasInimigas.size(); i++) {
+            Robotnikka.OndaInimiga onda = ondasInimigas.get(i);
+            onda.distanciaPercorrida = (getTime() - onda.tempoDisparo) * onda.velocidadeBala;
+
+            if (!onda.perfilCalculado && arvoreSurf.tamanho() > 0) {
+                List<Robotnikka.ArvoreKd.Entrada<Double>> vizinhos = arvoreSurf.vizinhoMaisProximo(onda.caracteristicas,
+                        (int) Math.min(Math.max(5, arvoreSurf.tamanho() / 10.0), 100), false);
+                double larguraBanda = 0.05;
+                for (int indiceGf = 0; indiceGf < TOTAL_FATORES_MOVIMENTO; indiceGf++) {
+                    double gfAlvo = (double) (indiceGf - FATOR_MOVIMENTO_CENTRAL) / FATOR_MOVIMENTO_CENTRAL;
+                    double perigo = 0;
+                    for (Robotnikka.ArvoreKd.Entrada<Double> vizinho : vizinhos) {
+                        double pesoDistancia = 1.0 / (1.0 + vizinho.distancia);
+                        double diffGf = gfAlvo - vizinho.valor;
+                        double pesoKernel = Math.exp(-0.5 * Math.pow(diffGf / larguraBanda, 2));
+                        perigo += pesoDistancia * pesoKernel;
+                    }
+                    onda.perfilPerigo[indiceGf] = perigo;
+                }
+                onda.perfilCalculado = true;
+            }
+
+            if (onda.distanciaPercorrida > minhaPosicao.distance(onda.posicaoDisparo) + 50) {
+                double diffAngulo = calcularAnguloAbsoluto(onda.posicaoDisparo, minhaPosicao) - onda.anguloDireto;
+                double gf = Utils.normalRelativeAngle(diffAngulo) / calcularAnguloMaximoFuga(onda.velocidadeBala,
+                        minhaPosicao.distance(onda.posicaoDisparo)) * onda.direcao;
+                arvoreSurf.adicionarPonto(onda.caracteristicas, limitarValor(-1.0, 1.0, gf));
+
+                // Alimenta heuristica rapida de Surfing
+                int indexGf = (int) Math.round((limitarValor(-1.0, 1.0, gf) * FATOR_MOVIMENTO_CENTRAL) + FATOR_MOVIMENTO_CENTRAL);
+                indexGf = (int) Math.max(0, Math.min(TOTAL_FATORES_MOVIMENTO - 1, indexGf));
+                for (int x = 0; x < TOTAL_FATORES_MOVIMENTO; x++) {
+                    hibridoMovimentoFrio[x] += 1.0 / (Math.pow(indexGf - x, 2) + 1);
+                }
+
+                ondasInimigas.remove(i);
+                i--;
+            }
+        }
+    }
 }
