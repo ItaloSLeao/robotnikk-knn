@@ -276,6 +276,57 @@ public class Robotnikk extends AdvancedRobot {
         setTurnRadarRightRadians(Utils.normalRelativeAngle(anguloAbsoluto - getRadarHeadingRadians()) * 2);
     }
 
-    
+    /**
+     * Remove ondas que ja foram colididas ou destruidas no ar.
+     */
+    public void onBulletHitBullet(BulletHitBulletEvent e) {
+        if (!ondasInimigas.isEmpty()) {
+            for (int i = 0; i < ondasInimigas.size(); i++) {
+                Robotnikka.OndaInimiga onda = ondasInimigas.get(i);
+                if (Math.abs(onda.distanciaPercorrida - minhaPosicao.distance(onda.posicaoDisparo)) < 80) {
+                    ondasInimigas.remove(i);
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * Dispara um evento de quando o robo toma dano e alimenta o algoritmo de aprendizado.
+     */
+    public void onHitByBullet(HitByBulletEvent e) {
+        acertosInimigosDestaPartida++; // Rastreia o acerto do inimigo para estatisticas de Cauterizacao
+
+        if (!ondasInimigas.isEmpty()) {
+            Point2D.Double posicaoAcerto = new Point2D.Double(e.getBullet().getX(), e.getBullet().getY());
+            Robotnikka.OndaInimiga ondaAcertou = null;
+
+            for (int x = 0; x < ondasInimigas.size(); x++) {
+                Robotnikka.OndaInimiga onda = ondasInimigas.get(x);
+                if (Math.abs(onda.distanciaPercorrida - minhaPosicao.distance(onda.posicaoDisparo)) < 50
+                        && Math.abs(Rules.getBulletSpeed(e.getBullet().getPower()) - onda.velocidadeBala) < 0.001) {
+                    ondaAcertou = onda;
+                    break;
+                }
+            }
+
+            if (ondaAcertou != null) {
+                double diffAngulo = calcularAnguloAbsoluto(ondaAcertou.posicaoDisparo, posicaoAcerto)
+                        - ondaAcertou.anguloDireto;
+                double gf = Utils.normalRelativeAngle(diffAngulo) / calcularAnguloMaximoFuga(ondaAcertou.velocidadeBala, minhaPosicao.distance(ondaAcertou.posicaoDisparo))
+                        * ondaAcertou.direcao;
+                arvoreSurf.adicionarPonto(ondaAcertou.caracteristicas, limitarValor(-1.0, 1.0, gf));
+
+                // Alimenta heuristica rapida de Surfing
+                int indexGf = (int) Math.round((limitarValor(-1.0, 1.0, gf) * FATOR_MOVIMENTO_CENTRAL) + FATOR_MOVIMENTO_CENTRAL);
+                indexGf = (int) Math.max(0, Math.min(TOTAL_FATORES_MOVIMENTO - 1, indexGf));
+                for (int x = 0; x < TOTAL_FATORES_MOVIMENTO; x++) {
+                    hibridoMovimentoFrio[x] += 1.0 / (Math.pow(indexGf - x, 2) + 1);
+                }
+
+                ondasInimigas.remove(ondaAcertou);
+            }
+        }
+    }
 
 }
