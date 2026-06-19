@@ -598,4 +598,28 @@ public class Robotnikk extends AdvancedRobot {
                     proximaDir, proximaVel, tempoJogo + 1);
         }
     }
+
+    /**
+     * Funcoes auxiliares para calcular o comportamento fisico do ambiente do robocode.
+     */
+    public static class Fisica {
+        public static double proximaVelocidade(double v, int d) {
+            if (d == 0)
+                return v - Math.signum(v) * Math.min(desaceleracao(Math.abs(v)), Math.abs(v));
+            return Math.max(-8, Math.min(8, v + d * (Math.signum(v) * d < 0 ? desaceleracao(Math.abs(v)) : 1)));
+        }
+
+        public static double desaceleracao(double vel) {
+            return Math.max(1, Math.min(2, 1 + vel / 2));
+        }
+
+        public static double curvaMaxima(double v) {
+            return Math.PI / 18 - Math.abs(v) * Math.PI / 240;
+        }
+
+        public static double incrementoCurva(double t, double v) {
+            double max = curvaMaxima(v);
+            return Math.max(-max, Math.min(max, t));
+        }
+    }
 }
