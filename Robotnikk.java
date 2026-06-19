@@ -62,8 +62,7 @@ public class Robotnikk extends AdvancedRobot {
     //arrays heuristicos para o cold start, ate a arvore knn tiver condicoes de aprendizado
     public static double[] hibridoTiroFrio = new double[TOTAL_FATORES_TIRO];
     public static double[] hibridoMovimentoFrio = new double[TOTAL_FATORES_MOVIMENTO];
-
-
+    
     /**
      * Inicializa as variaveis, configura as cores do robo e inicia o giro continuo do radar.
      */
@@ -730,5 +729,367 @@ public class Robotnikk extends AdvancedRobot {
             return false;
         }
     }
+
+    /**
+     * Implementacao de uma arvore KD (K-Dimensional) para agrupamento e consultas ageis de vizinhos mais proximos (KNN)
+     */
+    public static abstract class ArvoreKd<T> {
+        private static final int tamanhoBalde = 24;
+        private final int dimensoes;
+        private final Robotnikka.ArvoreKd<T> pai;
+        private final LinkedList<double[]> pilhaPosicoes;
+        private final Integer limiteTamanho;
+        private double[][] posicoes;
+        private Object[] dados;
+        private int totalPosicoes;
+        private Robotnikka.ArvoreKd<T> esquerda, direita;
+        private int dimensaoCorte;
+        private double valorCorte;
+        private double[] limiteMinimo, limiteMaximo;
+        private boolean singularidade;
+        private Robotnikka.ArvoreKd.EstadoNo estadoNo;
+
+        private ArvoreKd(int dimensoes, Integer limiteTamanho) {
+            this.dimensoes = dimensoes;
+            this.posicoes = new double[tamanhoBalde][];
+            this.dados = new Object[tamanhoBalde];
+            this.totalPosicoes = 0;
+            this.singularidade = true;
+            this.pai = null;
+            this.limiteTamanho = limiteTamanho;
+            this.pilhaPosicoes = limiteTamanho != null ? new LinkedList<>() : null;
+        }
+
+        private ArvoreKd(Robotnikka.ArvoreKd<T> pai, boolean direitaDirecional) {
+            this.dimensoes = pai.dimensoes;
+            this.posicoes = new double[Math.max(tamanhoBalde, pai.totalPosicoes)][];
+            this.dados = new Object[Math.max(tamanhoBalde, pai.totalPosicoes)];
+            this.totalPosicoes = 0;
+            this.singularidade = true;
+            this.pai = pai;
+            this.limiteTamanho = null;
+            this.pilhaPosicoes = null;
+        }
+
+        public int tamanho() {
+            return totalPosicoes;
+        }
+
+        public void adicionarPonto(double[] posicao, T valor) {
+            Robotnikka.ArvoreKd<T> cursor = this;
+            while (cursor.posicoes == null || cursor.totalPosicoes >= cursor.posicoes.length) {
+                if (cursor.posicoes != null) {
+                    cursor.dimensaoCorte = cursor.encontrarEixoMaisLargo();
+                    cursor.valorCorte = (cursor.limiteMinimo[cursor.dimensaoCorte]
+                            + cursor.limiteMaximo[cursor.dimensaoCorte]) * 0.5f;
+                    if (cursor.valorCorte == Double.POSITIVE_INFINITY)
+                        cursor.valorCorte = Double.MAX_VALUE;
+                    else if (cursor.valorCorte == Double.NEGATIVE_INFINITY)
+                        cursor.valorCorte = -Double.MAX_VALUE;
+                    else if (Double.isNaN(cursor.valorCorte))
+                        cursor.valorCorte = 0;
+
+                    if (cursor.limiteMinimo[cursor.dimensaoCorte] == cursor.limiteMaximo[cursor.dimensaoCorte]) {
+                        double[][] novasPosicoes = new double[cursor.posicoes.length * 2][];
+                        System.arraycopy(cursor.posicoes, 0, novasPosicoes, 0, cursor.totalPosicoes);
+                        cursor.posicoes = novasPosicoes;
+                        Object[] novosDados = new Object[novasPosicoes.length];
+                        System.arraycopy(cursor.dados, 0, novosDados, 0, cursor.totalPosicoes);
+                        cursor.dados = novosDados;
+                        break;
+                    }
+                    if (cursor.valorCorte == cursor.limiteMaximo[cursor.dimensaoCorte])
+                        cursor.valorCorte = cursor.limiteMinimo[cursor.dimensaoCorte];
+
+                    Robotnikka.ArvoreKd<T> esquerdaNo = new Robotnikka.ArvoreKd.NoFilho(cursor, false);
+                    Robotnikka.ArvoreKd<T> direitaNo = new Robotnikka.ArvoreKd.NoFilho(cursor, true);
+
+                    for (int i = 0; i < cursor.totalPosicoes; i++) {
+                        double[] posAntiga = cursor.posicoes[i];
+                        Object dadosAntigos = cursor.dados[i];
+                        if (posAntiga[cursor.dimensaoCorte] > cursor.valorCorte) {
+                            direitaNo.posicoes[direitaNo.totalPosicoes] = posAntiga;
+                            direitaNo.dados[direitaNo.totalPosicoes] = dadosAntigos;
+                            direitaNo.totalPosicoes++;
+                            direitaNo.estenderLimites(posAntiga);
+                        } else {
+                            esquerdaNo.posicoes[esquerdaNo.totalPosicoes] = posAntiga;
+                            esquerdaNo.dados[esquerdaNo.totalPosicoes] = dadosAntigos;
+                            esquerdaNo.totalPosicoes++;
+                            esquerdaNo.estenderLimites(posAntiga);
+                        }
+                    }
+                    cursor.esquerda = esquerdaNo;
+                    cursor.direita = direitaNo;
+                    cursor.posicoes = null;
+                    cursor.dados = null;
+                }
+                cursor.totalPosicoes++;
+                cursor.estenderLimites(posicao);
+                if (posicao[cursor.dimensaoCorte] > cursor.valorCorte)
+                    cursor = cursor.direita;
+                else
+                    cursor = cursor.esquerda;
+            }
+            cursor.posicoes[cursor.totalPosicoes] = posicao;
+            cursor.dados[cursor.totalPosicoes] = valor;
+            cursor.totalPosicoes++;
+            cursor.estenderLimites(posicao);
+
+            if (this.limiteTamanho != null) {
+                this.pilhaPosicoes.add(posicao);
+                if (this.totalPosicoes > this.limiteTamanho)
+                    this.removerAntigo();
+            }
+        }
+
+        private void estenderLimites(double[] posicao) {
+            if (limiteMinimo == null) {
+                limiteMinimo = new double[dimensoes];
+                System.arraycopy(posicao, 0, limiteMinimo, 0, dimensoes);
+                limiteMaximo = new double[dimensoes];
+                System.arraycopy(posicao, 0, limiteMaximo, 0, dimensoes);
+                return;
+            }
+            for (int i = 0; i < dimensoes; i++) {
+                if (Double.isNaN(posicao[i])) {
+                    limiteMinimo[i] = Double.NaN;
+                    limiteMaximo[i] = Double.NaN;
+                    singularidade = false;
+                } else if (limiteMinimo[i] > posicao[i]) {
+                    limiteMinimo[i] = posicao[i];
+                    singularidade = false;
+                } else if (limiteMaximo[i] < posicao[i]) {
+                    limiteMaximo[i] = posicao[i];
+                    singularidade = false;
+                }
+            }
+        }
+
+        private int encontrarEixoMaisLargo() {
+            int maisLargo = 0;
+            double largura = limiteMaximo[0] - limiteMinimo[0];
+            if (Double.isNaN(largura))
+                largura = 0;
+            for (int i = 1; i < dimensoes; i++) {
+                double larguraAtual = limiteMaximo[i] - limiteMinimo[i];
+                if (Double.isNaN(larguraAtual))
+                    larguraAtual = 0;
+                if (larguraAtual > largura) {
+                    maisLargo = i;
+                    largura = larguraAtual;
+                }
+            }
+            return maisLargo;
+        }
+
+        private void removerAntigo() {
+            double[] posicao = this.pilhaPosicoes.removeFirst();
+            Robotnikka.ArvoreKd<T> cursor = this;
+            while (cursor.posicoes == null) {
+                if (posicao[cursor.dimensaoCorte] > cursor.valorCorte)
+                    cursor = cursor.direita;
+                else
+                    cursor = cursor.esquerda;
+            }
+            for (int i = 0; i < cursor.totalPosicoes; i++) {
+                if (cursor.posicoes[i] == posicao) {
+                    System.arraycopy(cursor.posicoes, i + 1, cursor.posicoes, i, cursor.totalPosicoes - i - 1);
+                    cursor.posicoes[cursor.totalPosicoes - 1] = null;
+                    System.arraycopy(cursor.dados, i + 1, cursor.dados, i, cursor.totalPosicoes - i - 1);
+                    cursor.dados[cursor.totalPosicoes - 1] = null;
+                    do {
+                        cursor.totalPosicoes--;
+                        cursor = cursor.pai;
+                    } while (cursor != null && cursor.pai != null);
+                    return;
+                }
+            }
+        }
+
+        private enum EstadoNo { //enums para representar o conjunto de estado dos nós
+            NENHUM, ESQUERDAVISITADA, DIREITAVISITADA, TUDOVISITADO
+        }
+
+        public static class Entrada<T> {
+            public double distancia;
+            public final T valor;
+
+            public Entrada(double dist, T v) {
+                this.distancia = dist;
+                this.valor = v;
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+        public List<Robotnikka.ArvoreKd.Entrada<T>> vizinhoMaisProximo(double[] posicao, int total, boolean ordenacaoSequencial) {
+            Robotnikka.ArvoreKd<T> cursor = this;
+            cursor.estadoNo = Robotnikka.ArvoreKd.EstadoNo.NENHUM;
+            double alcance = Double.POSITIVE_INFINITY;
+            Robotnikka.ArvoreKd.HeapResultado heapResult = new Robotnikka.ArvoreKd.HeapResultado(total);
+
+            do {
+                if (cursor.estadoNo == Robotnikka.ArvoreKd.EstadoNo.TUDOVISITADO) {
+                    cursor = cursor.pai;
+                    continue;
+                }
+                if (cursor.estadoNo == Robotnikka.ArvoreKd.EstadoNo.NENHUM && cursor.posicoes != null) {
+                    if (cursor.totalPosicoes > 0) {
+                        if (cursor.singularidade) {
+                            double dist = distanciaPonto(cursor.posicoes[0], posicao);
+                            if (dist <= alcance)
+                                for (int i = 0; i < cursor.totalPosicoes; i++)
+                                    heapResult.adicionarValor(dist, cursor.dados[i]);
+                        } else {
+                            for (int i = 0; i < cursor.totalPosicoes; i++) {
+                                double dist = distanciaPonto(cursor.posicoes[i], posicao);
+                                heapResult.adicionarValor(dist, cursor.dados[i]);
+                            }
+                        }
+                        alcance = heapResult.obterDistanciaMaxima();
+                    }
+                    if (cursor.pai == null)
+                        break;
+                    cursor = cursor.pai;
+                    continue;
+                }
+                Robotnikka.ArvoreKd<T> proximoCursor = null;
+                if (cursor.estadoNo == Robotnikka.ArvoreKd.EstadoNo.NENHUM) {
+                    if (posicao[cursor.dimensaoCorte] > cursor.valorCorte) {
+                        proximoCursor = cursor.direita;
+                        cursor.estadoNo = Robotnikka.ArvoreKd.EstadoNo.DIREITAVISITADA;
+                    } else {
+                        proximoCursor = cursor.esquerda;
+                        cursor.estadoNo = Robotnikka.ArvoreKd.EstadoNo.ESQUERDAVISITADA;
+                    }
+                } else if (cursor.estadoNo == Robotnikka.ArvoreKd.EstadoNo.ESQUERDAVISITADA) {
+                    proximoCursor = cursor.direita;
+                    cursor.estadoNo = Robotnikka.ArvoreKd.EstadoNo.TUDOVISITADO;
+                } else if (cursor.estadoNo == Robotnikka.ArvoreKd.EstadoNo.DIREITAVISITADA) {
+                    proximoCursor = cursor.esquerda;
+                    cursor.estadoNo = Robotnikka.ArvoreKd.EstadoNo.TUDOVISITADO;
+                }
+
+                if (cursor.estadoNo == Robotnikka.ArvoreKd.EstadoNo.TUDOVISITADO) {
+                    if (proximoCursor.totalPosicoes == 0
+                            || (!proximoCursor.singularidade && distanciaRegiaoPonto(posicao,
+                            proximoCursor.limiteMinimo, proximoCursor.limiteMaximo) > alcance))
+                        continue;
+                }
+                cursor = proximoCursor;
+                cursor.estadoNo = Robotnikka.ArvoreKd.EstadoNo.NENHUM;
+            } while (cursor.pai != null || cursor.estadoNo != Robotnikka.ArvoreKd.EstadoNo.TUDOVISITADO);
+
+            ArrayList<Robotnikka.ArvoreKd.Entrada<T>> resultados = new ArrayList<>(heapResult.valores);
+            for (int i = 0; i < heapResult.valores; i++)
+                resultados.add(new Robotnikka.ArvoreKd.Entrada<T>(heapResult.distancia[i], (T) heapResult.dados[i]));
+            return resultados;
+        } //Fim vizinhoMaisProximo
+
+        public abstract double distanciaPonto(double[] p1, double[] p2);
+
+        protected abstract double distanciaRegiaoPonto(double[] ponto, double[] min, double[] max);
+
+        private class NoFilho extends Robotnikka.ArvoreKd<T> {
+            private NoFilho(Robotnikka.ArvoreKd<T> pai, boolean direita) {
+                super(pai, direita);
+            }
+
+            public double distanciaPonto(double[] p1, double[] p2) {
+                throw new IllegalStateException();
+            }
+
+            protected double distanciaRegiaoPonto(double[] ponto, double[] min, double[] max) {
+                throw new IllegalStateException();
+            }
+        } //Fim NoFilho
+
+        public static class Manhattan<T> extends Robotnikka.ArvoreKd<T> {
+            public Manhattan(int dimensoes, Integer limiteTamanho) {
+                super(dimensoes, limiteTamanho);
+            }
+
+            public double distanciaPonto(double[] p1, double[] p2) {
+                double d = 0;
+                for (int i = 0; i < p1.length; i++) {
+                    double diff = (p1[i] - p2[i]);
+                    if (!Double.isNaN(diff))
+                        d += (diff < 0) ? -diff : diff;
+                }
+                return d;
+            }
+
+            protected double distanciaRegiaoPonto(double[] ponto, double[] min, double[] max) {
+                double d = 0;
+                for (int i = 0; i < ponto.length; i++) {
+                    double diff = 0;
+                    if (ponto[i] > max[i])
+                        diff = (ponto[i] - max[i]);
+                    else if (ponto[i] < min[i])
+                        diff = (min[i] - ponto[i]);
+                    if (!Double.isNaN(diff))
+                        d += diff;
+                }
+                return d;
+            }
+        } //Fim Manhattan
+
+        private static class HeapResultado {
+            protected final Object[] dados;
+            protected final double[] distancia;
+            protected final int tamanho;
+            protected int valores;
+
+            public HeapResultado(int tamanho) {
+                this.dados = new Object[tamanho];
+                this.distancia = new double[tamanho];
+                this.tamanho = tamanho;
+                this.valores = 0;
+            }
+
+            public void adicionarValor(double dist, Object valor) {
+                if (valores < tamanho) {
+                    dados[valores] = valor;
+                    distancia[valores] = dist;
+                    subirHeap(valores);
+                    valores++;
+                } else if (dist < distancia[0]) {
+                    dados[0] = valor;
+                    distancia[0] = dist;
+                    descerHeap(0);
+                }
+            }
+
+            public double obterDistanciaMaxima() {
+                return valores < tamanho ? Double.POSITIVE_INFINITY : distancia[0];
+            }
+
+            protected void subirHeap(int c) {
+                for (int p = (c - 1) / 2; c != 0 && distancia[c] > distancia[p]; c = p, p = (c - 1) / 2) {
+                    Object pDados = dados[p];
+                    double pDist = distancia[p];
+                    dados[p] = dados[c];
+                    distancia[p] = distancia[c];
+                    dados[c] = pDados;
+                    distancia[c] = pDist;
+                }
+            }
+
+            protected void descerHeap(int p) {
+                for (int c = p * 2 + 1; c < valores; p = c, c = p * 2 + 1) {
+                    if (c + 1 < valores && distancia[c] < distancia[c + 1])
+                        c++;
+                    if (distancia[p] < distancia[c]) {
+                        Object pDados = dados[p];
+                        double pDist = distancia[p];
+                        dados[p] = dados[c];
+                        distancia[p] = distancia[c];
+                        dados[c] = pDados;
+                        distancia[c] = pDist;
+                    }
+                }
+            }
+        } //Fim HeapResultado
+    } //Fim ArvoreKd
 
 }
