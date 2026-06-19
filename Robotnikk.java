@@ -434,4 +434,44 @@ public class Robotnikk extends AdvancedRobot {
         }
         return ondaSurf;
     }
+
+    /**
+     * Simula a posicao prevista de colisao do robo com uma onda inimiga, prevendo possiveis futuros.
+     */
+    public FuturoPrevisto previsao(Robotnikka.OndaInimiga ondaSurf, int direcao) {
+        Robotnikka.FuturoPrevisto estado = new Robotnikka.FuturoPrevisto(minhaPosicao, getHeadingRadians(), getVelocity(), getTime());
+        int contador = 0;
+        boolean interceptado = false;
+
+        do {
+            double anguloAlvo = calcularAnguloAbsoluto(ondaSurf.posicaoDisparo, estado.posicao);
+            anguloAlvo += direcao * QUASE_METADE_PI;
+
+            anguloAlvo = suavizarMovimentoParede(estado.posicao, anguloAlvo, direcao);
+
+            double anguloMovimento = Utils.normalRelativeAngle(anguloAlvo - estado.direcaoAtual);
+            int dirMovel = 1;
+
+            if (Math.cos(anguloMovimento) < 0) {
+                anguloMovimento += Math.PI;
+                dirMovel = -1;
+            }
+
+            anguloMovimento = Utils.normalRelativeAngle(anguloMovimento);
+            estado = estado.obterProximoEstado(dirMovel, anguloMovimento);
+            estado = verificarColisaoParede(estado);
+
+            // Penalidade Inercial (Delay de reaceleracao)
+            if (estado.velocidade == 0.0) contador += 1;
+
+            contador++;
+
+            if (estado.posicao.distance(ondaSurf.posicaoDisparo) < ondaSurf.distanciaPercorrida
+                    + (contador * ondaSurf.velocidadeBala) + ondaSurf.velocidadeBala) {
+                interceptado = true;
+            }
+        } while (!interceptado && contador < 500);
+
+        return estado;
+    }
 }
