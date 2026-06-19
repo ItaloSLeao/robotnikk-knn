@@ -417,4 +417,21 @@ public class Robotnikk extends AdvancedRobot {
             }
         }
     }
+
+    /**
+     * Retorna a onda inimiga mais proxima que ainda pode ser evitada.
+     */
+    public OndaInimiga obterOndaMaisProxima() {
+        double menorDistancia = Double.POSITIVE_INFINITY;
+        Robotnikka.OndaInimiga ondaSurf = null;
+        for (int i = 0; i < ondasInimigas.size(); i++) {
+            Robotnikka.OndaInimiga onda = ondasInimigas.get(i);
+            double distancia = minhaPosicao.distance(onda.posicaoDisparo) - onda.distanciaPercorrida;
+            if (distancia > onda.velocidadeBala && distancia < menorDistancia) {
+                ondaSurf = onda;
+                menorDistancia = distancia;
+            }
+        }
+        return ondaSurf;
+    }
 }
