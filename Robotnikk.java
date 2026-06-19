@@ -474,4 +474,38 @@ public class Robotnikk extends AdvancedRobot {
 
         return estado;
     }
+
+    /**
+     * Calcula o perigo de tomar dano ao simular o movimento de interseccao do robo com uma onda inimiga
+     */
+    public double calcularPerigo(Robotnikka.OndaInimiga ondaSurf, int direcao) {
+        Robotnikka.FuturoPrevisto posicaoPrevista = previsao(ondaSurf, direcao);
+        double diffAngulo = calcularAnguloAbsoluto(ondaSurf.posicaoDisparo, posicaoPrevista.posicao)
+                - ondaSurf.anguloDireto;
+        double gf = Utils.normalRelativeAngle(diffAngulo) / calcularAnguloMaximoFuga(ondaSurf.velocidadeBala,
+                minhaPosicao.distance(ondaSurf.posicaoDisparo)) * ondaSurf.direcao;
+        gf = limitarValor(-1.0, 1.0, gf); //guessfactors
+
+        int indice = (int) Math.round((gf * FATOR_MOVIMENTO_CENTRAL) + FATOR_MOVIMENTO_CENTRAL);
+        indice = (int) limitarValor(0, TOTAL_FATORES_MOVIMENTO - 1, indice);
+
+        double perigoKNN = 0;
+        if (ondaSurf.perfilCalculado) {
+            perigoKNN = ondaSurf.perfilPerigo[Math.max(0, indice - 1)] +
+                    ondaSurf.perfilPerigo[indice] +
+                    ondaSurf.perfilPerigo[Math.min(TOTAL_FATORES_MOVIMENTO - 1, indice + 1)];
+        }
+
+        double perigoFrio = hibridoMovimentoFrio[Math.max(0, indice - 1)] +
+                hibridoMovimentoFrio[indice] +
+                hibridoMovimentoFrio[Math.min(TOTAL_FATORES_MOVIMENTO - 1, indice + 1)];
+
+        //implementacao hibrida do surf: transicao suave do array frio (0-50 nos) para KNN (100 nos)
+        double pesoKNN = limitarValor(0.0, 1.0, (arvoreSurf.tamanho() - 50.0) / 50.0);
+
+        //se a arvore estiver vazia, foge do centro absoluto (heuristica base de 0 nos)
+        if (arvoreSurf.tamanho() == 0 && perigoFrio == 0) return Math.abs(gf);
+
+        return (perigoKNN * pesoKNN) + (perigoFrio * (1.0 - pesoKNN));
+    }
 }
