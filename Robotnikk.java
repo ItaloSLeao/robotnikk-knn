@@ -521,4 +521,35 @@ public class Robotnikk extends AdvancedRobot {
         }
         return estado;
     }
+
+    /**
+     * Ajusta o angulo do movimento do robo para que ele surfe entre as margens da parede
+     */
+    public double suavizarMovimentoParede(Point2D.Double loc, double dir, int dirOrbita) {
+        dir = Utils.normalAbsoluteAngle(dir);
+        double vel = 8.0;
+        double x = loc.x, y = loc.y;
+        double norte = alturaCampo - MARGEM_PAREDE;
+        double sul = MARGEM_PAREDE;
+        double leste = larguraCampo - MARGEM_PAREDE;
+        double oeste = MARGEM_PAREDE;
+
+        if (dir > Math.PI) {
+            if (deveSuavizar(dir - Math.PI, vel, x - oeste, dirOrbita))
+                dir = suavizarAngulo(vel, x - oeste, dirOrbita) + Math.PI;
+        } else if (dir < Math.PI) {
+            if (deveSuavizar(dir, vel, leste - x, dirOrbita))
+                dir = suavizarAngulo(vel, leste - x, dirOrbita);
+        }
+
+        if (dir < Math.PI / 2 || dir > 3 * Math.PI / 2) {
+            if (deveSuavizar(dir + Math.PI / 2, vel, norte - y, dirOrbita))
+                dir = suavizarAngulo(vel, norte - y, dirOrbita) - Math.PI / 2;
+        } else if (dir > Math.PI / 2 && dir < 3 * Math.PI / 2) {
+            if (deveSuavizar(dir - Math.PI / 2, vel, y - sul, dirOrbita))
+                dir = suavizarAngulo(vel, y - sul, dirOrbita) + Math.PI / 2;
+        }
+
+        return dir;
+    }
 }
