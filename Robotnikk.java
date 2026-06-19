@@ -552,4 +552,26 @@ public class Robotnikk extends AdvancedRobot {
 
         return dir;
     }
+
+    /**
+     * Calcula o arco exato de deslocamento para "suavizar" o angulo entre o robo e a parede
+     */
+    private double suavizarAngulo(double vel, double distParede, int dirOrbita) {
+        if (distParede < 0.01)
+            return dirOrbita == 1 ? Math.PI : 0;
+        double dir = Math.acos((distParede - RAIO_CURVA) / Math.sqrt(RAIO_CURVA * RAIO_CURVA + vel * vel))
+                + Math.atan(vel / RAIO_CURVA);
+        return (dirOrbita == 1 ? dir : Math.PI - dir);
+    }
+
+    /**
+     * Testa antes se a atual trajetoria do robo colidira com a margem, exigindo uma retificacao.
+     */
+    private boolean deveSuavizar(double dir, double vel, double distParede, int dirOrbita) {
+        distParede -= (vel * Math.sin(dir));
+        if (distParede < 0)
+            return true;
+        distParede -= (1 + Math.sin(dir + (dirOrbita * Math.PI / 2))) * RAIO_CURVA;
+        return distParede < 0;
+    }
 }
