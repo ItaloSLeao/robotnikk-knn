@@ -343,4 +343,33 @@ public class Robotnikk extends AdvancedRobot {
         return dist;
     }
 
+    /**
+     * Calcula o perigo de tomar dano para cada direcao de fuga e foge para o caminho mais seguro calculado
+     */
+    public void executarSurfing() {
+        Robotnikka.OndaInimiga ondaSurf = obterOndaMaisProxima();
+        if (ondaSurf == null)
+            return;
+
+        double perigoEsquerda = calcularPerigo(ondaSurf, -1);
+        double perigoDireita = calcularPerigo(ondaSurf, 1);
+
+        double anguloAlvo = calcularAnguloAbsoluto(ondaSurf.posicaoDisparo, minhaPosicao);
+
+        double vicioRecuo = 0;
+        // Energia removida para evitar desestabilizacao do KNN (Cold Start / Energy Snowball)
+
+        double minDistanciaParede = Math.min(Math.min(minhaPosicao.x, larguraCampo - minhaPosicao.x),
+                Math.min(minhaPosicao.y, alturaCampo - minhaPosicao.y));
+        if (minDistanciaParede < 120) {
+            vicioRecuo = getTime() < 50 ? -0.25 : -0.1; // Breakout reativo inicial
+        }
+
+        if (perigoEsquerda < perigoDireita) {
+            anguloAlvo = suavizarMovimentoParede(minhaPosicao, anguloAlvo - QUASE_METADE_PI - vicioRecuo, -1);
+        } else {
+            anguloAlvo = suavizarMovimentoParede(minhaPosicao, anguloAlvo + QUASE_METADE_PI + vicioRecuo, 1);
+        }
+        configurarFrenteTras(this, anguloAlvo);
+    }
 }
