@@ -508,4 +508,17 @@ public class Robotnikk extends AdvancedRobot {
 
         return (perigoKNN * pesoKNN) + (perigoFrio * (1.0 - pesoKNN));
     }
+
+    /**
+     * Reposiciona o robo caso a simulacao detecte um futuro de colisao entre ele e a parede.
+     */
+    public FuturoPrevisto verificarColisaoParede(Robotnikka.FuturoPrevisto estado) {
+        if (!campoBatalha.contains(estado.posicao)) {
+            return new Robotnikka.FuturoPrevisto(
+                    new Point2D.Double(limitarValor(18.0, larguraCampo - 18.0, estado.posicao.x),
+                            limitarValor(18.0, alturaCampo - 18.0, estado.posicao.y)),
+                    estado.direcaoAtual, 0.0, estado.tempoJogo); // Colidir zera a velocidade na fisica do jogo
+        }
+        return estado;
+    }
 }
